@@ -10,9 +10,9 @@ namespace WsdlFlattener
 {
     public class Flattener
     {
-        public string GetFlattenedWsdl(string wsdlUrl, string filePathAndName)
+        public string GetFlattenedWsdl(string wsdlUrl, string filePathAndName, System.Net.NetworkCredential mexNetworkCredentials)
         {
-            var metadata = GetServiceMetadata(wsdlUrl, MetadataExchangeClientMode.HttpGet);
+            var metadata = GetServiceMetadata(wsdlUrl, MetadataExchangeClientMode.HttpGet, mexNetworkCredentials);
             var newWsdl = GetFlattenedServiceDescription(metadata);
 
             if (String.IsNullOrEmpty(filePathAndName))
@@ -34,22 +34,34 @@ namespace WsdlFlattener
             return xml;
         }
 
-        private MetadataSet GetServiceMetadata(string wsdlUrl, MetadataExchangeClientMode clientMode)
+        private MetadataSet GetServiceMetadata(string wsdlUrl, MetadataExchangeClientMode clientMode, System.Net.NetworkCredential mexNetworkCredentials)
         {
+            MetadataSet metadata = null;
             Binding mexBinding;
 
-            if (clientMode == MetadataExchangeClientMode.HttpGet)
+            if (clientMode == MetadataExchangeClientMode.HttpGet){
                 mexBinding = new BasicHttpBinding { MaxReceivedMessageSize = 50000000L };
+            }
             else
+            {
                 mexBinding = new WSHttpBinding(SecurityMode.None) { MaxReceivedMessageSize = 50000000L };
+            }
 
             var mexClient = new MetadataExchangeClient(mexBinding)
             {
                 ResolveMetadataReferences = true,
-                MaximumResolvedReferences = 200
+                MaximumResolvedReferences = 200,
+                HttpCredentials = mexNetworkCredentials
             };
 
-            return mexClient.GetMetadata(new Uri(wsdlUrl), clientMode);
+            try
+            {
+                metadata = mexClient.GetMetadata(new Uri(wsdlUrl), clientMode);
+            } catch (Exception ex) {
+                Console.WriteLine(String.Format("Error: {0}", ex.Message));
+            }
+
+            return metadata;
         }
 
         public ServiceDescription GetFlattenedServiceDescription(MetadataSet metadataSet)
