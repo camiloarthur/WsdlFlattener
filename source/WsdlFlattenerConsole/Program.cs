@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Security;
+using System.Text.RegularExpressions;
 using WsdlFlattener;
 
 namespace WsdlFlattenerConsole
@@ -42,17 +43,15 @@ namespace WsdlFlattenerConsole
             var filePath = string.Empty;
             var tempPath = Path.GetTempFileName();
             var user = string.Empty;
+            var domain = string.Empty;
             SecureString password = new SecureString();
-            var domain = "AMERICAS";
-
-            if (args.Length >= 3)
+            
+            if (args.Length >= 4)
             {
                 url = args[0];
                 filePath = args[1];
                 user = args[2];
-
-                if (args.Length == 4 && !string.IsNullOrEmpty(args[3]))
-                    domain = args[3];
+                domain = args[3];
                 
                 Console.Write("Enter your password: ");
                 password = GetPassword();
@@ -71,6 +70,7 @@ namespace WsdlFlattenerConsole
             else
             {
                 Console.WriteLine("Usage: wf [wsdlUrl] [outputFile]");
+                Console.WriteLine("wf [wsdlUrl] [outputFile] [user] [domain]");
                 return;
             }
 
@@ -79,9 +79,22 @@ namespace WsdlFlattenerConsole
 
             var xml = flat.GetFlattenedWsdl(url, tempPath, mexNetworkCredentials);
 
+            //Apply Auto-fix
+            if (args.Length >= 4)
+            {                
+                var extractor = Regex.Match(xml, "targetNamespace=\"(?<value>.*?)\"", RegexOptions.IgnoreCase);
+                var dynamicSearch = String.Format("xmlns:(?<SoapHeader>[a-zA-Z0-9]+)=\"{0}\"", extractor.Groups["value"]);
+                var newSoapHeader = Regex.Match(xml, dynamicSearch, RegexOptions.IgnoreCase);
+                var xmlnsToHead = Regex.Match(xml, ":part.*(?<xmlnsTag>xmlns:[a-zA-Z0-9\"/:=.]+\")", RegexOptions.IgnoreCase);
+
+                xml = new Regex("(?<SoapHeader>[a-zA-Z0-9]+):HeaderSoap").Replace(xml, String.Format("{0}:HeaderSoap", newSoapHeader.Groups["SoapHeader"]));
+                xml = new Regex(":part.*(?<xmlnsTag>xmlns:[a-zA-Z0-9\"/:=.]+\")").Replace(xml, String.Empty);
+                xml = new Regex(":definitions ").Replace(xml, String.Format(":definitions {0} ", xmlnsToHead.Groups["xmlnsTag"]));
+            }            
+
             if (String.IsNullOrWhiteSpace(filePath))
             {
-                Console.WriteLine(xml);
+                Console.WriteLine(xml.ToString());
             }
             else
             {
